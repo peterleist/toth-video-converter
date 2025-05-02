@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Build Script
 
@@ -11,6 +12,11 @@ import sys
 import subprocess
 import shutil
 from pathlib import Path
+import locale
+
+# Karakterkódolás beállítása
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 def check_dependencies():
     """Ellenőrzi és telepíti a szükséges függőségeket"""
@@ -154,7 +160,7 @@ def build_exe():
 
 def download_ffmpeg():
     """Letölti és kibontja az FFmpeg-et"""
-    print("FFmpeg letöltése...")
+    print("FFmpeg letoltese...")  # Ékezetek nélkül a biztonság kedvéért
     ffmpeg_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
     
     try:
@@ -162,29 +168,86 @@ def download_ffmpeg():
         os.makedirs("temp", exist_ok=True)
         
         # FFmpeg letöltése
-        subprocess.run(
-            ["curl", "-L", ffmpeg_url, "-o", "temp/ffmpeg.zip"],
-            check=True
-        )
+        print("FFmpeg letoltese folyamatban...")
+        download_cmd = ["curl", "-L", ffmpeg_url, "-o", "temp/ffmpeg.zip"]
+        subprocess.run(download_cmd, check=True, encoding='utf-8')
         
         # Kicsomagolás
-        subprocess.run(
-            ["powershell", "Expand-Archive", "-Path", "temp/ffmpeg.zip", "-DestinationPath", "temp/ffmpeg", "-Force"],
-            check=True
-        )
+        print("FFmpeg kicsomagolasa...")
+        try:
+            # PowerShell helyett alternatív módszer, ha elérhető
+            try:
+                import zipfile
+                with zipfile.ZipFile("temp/ffmpeg.zip", 'r') as zip_ref:
+                    zip_ref.extractall("temp/ffmpeg")
+                print("Kicsomagolas sikeres (Python zipfile modullal).")
+            except Exception as zip_err:
+                print(f"Python kicsomagolas sikertelen, PowerShell hasznalata: {zip_err}")
+                # Ha a Python kicsomagolás nem működik, próbáljuk PowerShell-lel ASCII karakterekkel
+                expand_cmd = ["powershell", "Expand-Archive", "-Path", "temp/ffmpeg.zip", 
+                            "-DestinationPath", "temp/ffmpeg", "-Force"]
+                subprocess.run(expand_cmd, check=True, encoding='ascii', errors='replace')
+        except Exception as unzip_err:
+            print(f"Kicsomagolas hiba: {unzip_err}")
+            raise
         
         # FFmpeg bin könyvtár másolása a dist könyvtárba
-        ffmpeg_bin = next(Path("temp/ffmpeg").glob("*/bin"))
+        print("FFmpeg binarisok masolasa...")
+        
+        # Könyvtárstruktúra ellenőrzése
+        temp_ffmpeg = Path("temp/ffmpeg")
+        
+        # Megpróbáljuk megtalálni a bin könyvtárat
+        bin_dirs = list(temp_ffmpeg.glob("*/bin"))
+        
+        if not bin_dirs:
+            print("A bin konyvtar nem talalhato. Konyvtarstruktura ellenorzese:")
+            for item in temp_ffmpeg.glob("*"):
+                print(f"  - {item.relative_to(temp_ffmpeg)}")
+                
+            # Keressünk .exe fájlokat bárhol
+            exe_files = list(temp_ffmpeg.glob("**/*.exe"))
+            if exe_files:
+                print(f"{len(exe_files)} .exe fajl talalhato. Az elso 3:")
+                for exe in exe_files[:3]:
+                    print(f"  - {exe.relative_to(temp_ffmpeg)}")
+                    
+                # Ha találtunk .exe fájlokat, használjuk őket
+                print("FFmpeg binarisok masolasa a talalt .exe fajlokbol...")
+                ffmpeg_dir = Path("dist/ffmpeg")
+                os.makedirs(ffmpeg_dir, exist_ok=True)
+                
+                for exe in exe_files:
+                    if exe.name.lower() in ['ffmpeg.exe', 'ffprobe.exe', 'ffplay.exe']:
+                        print(f"  - {exe.name} masolasa")
+                        shutil.copy(exe, ffmpeg_dir)
+                        
+                print("FFmpeg binarisok masolasa kesz.")
+                return True
+            else:
+                raise Exception("Nem talalhato FFmpeg binaris a letoltott archivumban")
+            
+        # Ha megtaláltuk a bin könyvtárat
+        ffmpeg_bin = bin_dirs[0]
+        print(f"FFmpeg bin konyvtar: {ffmpeg_bin}")
+        
         os.makedirs("dist/ffmpeg", exist_ok=True)
         
         # FFmpeg binárisok másolása
+        copied = 0
         for file in ffmpeg_bin.glob("*.exe"):
-            shutil.copy(file, "dist/ffmpeg")
+            dest = Path("dist/ffmpeg") / file.name
+            print(f"  - {file.name} masolasa")
+            shutil.copy(file, dest)
+            copied += 1
             
-        print("FFmpeg sikeresen letöltve és előkészítve.")
+        if copied == 0:
+            raise Exception("Nem talalhato .exe fajl az FFmpeg bin konyvtarban")
+            
+        print(f"FFmpeg sikeresen letoltve es elokeszitve. ({copied} fajl masolva)")
         return True
     except Exception as e:
-        print(f"Hiba az FFmpeg letöltése során: {e}")
+        print(f"Hiba az FFmpeg letoltese soran: {str(e).encode('ascii', 'replace').decode('ascii')}")
         return False
 
 def main():
