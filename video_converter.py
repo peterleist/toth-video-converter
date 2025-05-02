@@ -32,7 +32,7 @@ def check_ffmpeg():
         return False
 
 
-def convert_to_mpg(input_file, output_file=None, overwrite=False):
+def convert_to_mpg(input_file, output_file=None, overwrite=False, resolution="720x576"):
     """
     Convert a video file to MPG format with specific parameters.
     
@@ -40,6 +40,7 @@ def convert_to_mpg(input_file, output_file=None, overwrite=False):
         input_file: Path to the input video file.
         output_file: Path for the output MPG file. If None, derived from input filename.
         overwrite: Whether to overwrite existing output file.
+        resolution: Output video resolution as string, e.g. '720x576'.
     
     Returns:
         bool: True if conversion was successful, False otherwise.
@@ -59,7 +60,7 @@ def convert_to_mpg(input_file, output_file=None, overwrite=False):
         print(f"Error: Output file '{output_file}' already exists. Use --overwrite to force conversion.")
         return False
     
-    print(f"Converting '{input_file}' to '{output_file}'...")
+    print(f"Converting '{input_file}' to '{output_file}' with resolution {resolution}...")
     
     # Prepare FFmpeg command with exact parameters from the reference file
     # Changed -sample_fmt s32 to s16 as MP2 codec only supports s16
@@ -67,7 +68,7 @@ def convert_to_mpg(input_file, output_file=None, overwrite=False):
         "ffmpeg",
         "-i", input_file,
         "-c:v", "mpeg2video",        # MPEG-1/2 Video codec
-        "-s", "1920x1080",           # Resolution 1920x1080
+        "-s", resolution,            # Resolution from parameter
         "-r", "25",                  # Frame rate 25 fps
         "-pix_fmt", "yuv420p",       # Planar 4:2:0 YUV
         "-c:a", "mp2",               # MPEG Audio Layer 1/2
