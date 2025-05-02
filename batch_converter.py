@@ -9,6 +9,7 @@ It can process all video files in a directory or specific files provided by the 
 import os
 import sys
 import argparse
+import time
 from pathlib import Path
 from video_converter import check_ffmpeg, convert_to_mpg
 
@@ -47,6 +48,36 @@ def get_video_files(directory, recursive=False):
     
     return video_files
 
+def format_time(seconds):
+    """Format seconds into a human-readable time string."""
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    
+    minutes = int(seconds / 60)
+    sec = int(seconds % 60)
+    
+    if minutes < 60:
+        return f"{minutes}m {sec}s"
+    
+    hours = int(minutes / 60)
+    min_rem = int(minutes % 60)
+    
+    return f"{hours}h {min_rem}m {sec}s"
+
+def progress_callback(percent, remaining_seconds, current_time):
+    """Display progress information for the current conversion."""
+    progress_bar_length = 40
+    filled_length = int(progress_bar_length * percent / 100)
+    
+    # Create the progress bar
+    bar = '█' * filled_length + '░' * (progress_bar_length - filled_length)
+    
+    # Format the remaining time
+    remaining_str = format_time(remaining_seconds)
+    
+    # Print the progress bar and info
+    print(f"\r[{bar}] {percent:.1f}% - ETA: {remaining_str}", end='')
+
 def main():
     """Main function to handle command line arguments."""
     parser = argparse.ArgumentParser(description="Convert multiple video files to MPG format.")
@@ -55,6 +86,7 @@ def main():
     parser.add_argument("-r", "--recursive", action="store_true", help="Scan directory recursively")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite output files if they exist")
     parser.add_argument("-o", "--output-dir", help="Output directory for converted files")
+    parser.add_argument("--resolution", default="720x576", help="Output resolution (default: 720x576)")
     args = parser.parse_args()
     
     # Check if FFmpeg is installed
@@ -93,7 +125,15 @@ def main():
     successful = 0
     failed = 0
     
-    for file in files_to_convert:
+    # Track total progress
+    total_files = len(files_to_convert)
+    start_time = time.time()
+    
+    for index, file in enumerate(files_to_convert):
+        # Display file progress
+        file_name = os.path.basename(file)
+        print(f"\nFile {index+1}/{total_files}: {file_name}")
+        
         # Determine output file path
         if args.output_dir:
             # Create output directory if it doesn't exist
@@ -107,17 +147,29 @@ def main():
             # Output to the same directory as the input file
             output_file = None
         
-        # Convert the file
-        if convert_to_mpg(file, output_file, args.overwrite):
+        # Convert the file with progress reporting
+        if convert_to_mpg(file, output_file, args.overwrite, args.resolution, progress_callback):
             successful += 1
         else:
             failed += 1
+        
+        # Calculate overall progress
+        elapsed = time.time() - start_time
+        files_per_sec = (index + 1) / elapsed if elapsed > 0 else 0
+        eta = (total_files - (index + 1)) / files_per_sec if files_per_sec > 0 else 0
+        overall_progress = ((index + 1) / total_files) * 100
+        
+        print(f"\nOverall progress: {overall_progress:.1f}% - {index+1}/{total_files} files")
+        if eta > 0:
+            print(f"Estimated time remaining: {format_time(eta)}")
     
     # Print summary
+    total_time = time.time() - start_time
     print(f"\nConversion Summary:")
-    print(f"  Total: {len(files_to_convert)}")
+    print(f"  Total: {total_files}")
     print(f"  Successful: {successful}")
     print(f"  Failed: {failed}")
+    print(f"  Total time: {format_time(total_time)}")
 
 if __name__ == "__main__":
     main()

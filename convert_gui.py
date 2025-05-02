@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import threading
 import os
+import time
 from video_converter import convert_to_mpg, check_ffmpeg
 from tkinter import ttk
 
@@ -9,9 +10,11 @@ class VideoConverterGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Videó MPG konvertáló")
-        self.root.geometry("800x600")
+        self.root.geometry("800x800")
         self.files = []
         self.output_dir = os.getcwd()
+        self.current_file_index = 0
+        self.conversion_running = False
 
         # Modern téma beállítása
         self.set_modern_theme()
@@ -55,13 +58,15 @@ class VideoConverterGUI:
         
         self.file_tree = ttk.Treeview(
             tree_frame, 
-            columns=('file',), 
+            columns=('file', 'status'), 
             show='headings', 
             height=5,
             yscrollcommand=scrollbar.set
         )
         self.file_tree.heading('file', text='Fájlok')
+        self.file_tree.heading('status', text='Állapot')
         self.file_tree.column('file', width=400)
+        self.file_tree.column('status', width=100)
         self.file_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.file_tree.yview)
 
@@ -117,9 +122,11 @@ class VideoConverterGUI:
         self.convert_btn.pack(fill=tk.X, pady=5)
         self.create_tooltip(self.convert_btn, "A kiválasztott fájlok konvertálása MPG formátumba")
 
-        # Progress bar
+        # Progress frame - Teljes folyamat
         progress_frame = ttk.Frame(main_frame)
         progress_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(progress_frame, text="Összes folyamat:").pack(anchor=tk.W)
         
         self.progress = ttk.Progressbar(
             progress_frame, 
@@ -137,6 +144,29 @@ class VideoConverterGUI:
             anchor=tk.CENTER
         )
         self.status_label.pack(fill=tk.X, pady=5)
+
+        # Aktuális fájl progress frame
+        current_progress_frame = ttk.Frame(main_frame)
+        current_progress_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(current_progress_frame, text="Aktuális fájl:").pack(anchor=tk.W)
+        
+        self.current_file_progress = ttk.Progressbar(
+            current_progress_frame, 
+            orient='horizontal', 
+            length=400, 
+            mode='determinate',
+            style="TProgressbar"
+        )
+        self.current_file_progress.pack(fill=tk.X, pady=5)
+        
+        # Hátralévő idő jelző
+        self.time_label = ttk.Label(
+            current_progress_frame, 
+            text="Becsült hátralévő idő: --:--",
+            anchor=tk.CENTER
+        )
+        self.time_label.pack(fill=tk.X, pady=5)
 
     def set_modern_theme(self):
         """Modern téma beállítása a felületen"""
@@ -231,13 +261,45 @@ class VideoConverterGUI:
             # Frissítse a fájllistát
             self.file_tree.delete(*self.file_tree.get_children())
             for f in self.files:
-                self.file_tree.insert('', tk.END, values=(f,))
+                self.file_tree.insert('', tk.END, values=(f, "Várakozás"))
 
     def select_output_dir(self):
         dir_selected = filedialog.askdirectory(title="Célmappa kiválasztása")
         if dir_selected:
             self.output_dir = dir_selected
             self.dir_label.config(text=f"Célmappa: {self.output_dir}")
+
+    def format_time(self, seconds):
+        """Másodperceket formázza olvasható idővé"""
+        if seconds < 60:
+            return f"{int(seconds)} másodperc"
+        
+        minutes = int(seconds / 60)
+        sec = int(seconds % 60)
+        
+        if minutes < 60:
+            return f"{minutes} perc {sec} másodperc"
+        
+        hours = int(minutes / 60)
+        min_rem = int(minutes % 60)
+        
+        return f"{hours} óra {min_rem} perc {sec} másodperc"
+
+    def update_progress(self, percent, remaining_seconds, _):
+        """Frissíti az aktuális fájl előrehaladását és a becsült hátralévő időt"""
+        if not self.conversion_running:
+            return
+        
+        self.current_file_progress['value'] = percent
+        
+        # Hátralévő idő frissítése
+        formatted_time = self.format_time(remaining_seconds)
+        self.time_label.config(text=f"Becsült hátralévő idő: {formatted_time}")
+        
+        # Állapot frissítése a fájllistában
+        if self.current_file_index < len(self.files):
+            item_id = self.file_tree.get_children()[self.current_file_index]
+            self.file_tree.item(item_id, values=(self.files[self.current_file_index], f"{percent:.1f}%"))
 
     def start_conversion(self):
         if not self.files:
@@ -246,38 +308,66 @@ class VideoConverterGUI:
         if not check_ffmpeg():
             messagebox.showerror("FFmpeg hiányzik", "Az FFmpeg nincs telepítve vagy nincs az elérési úton!")
             return
+            
         # Progress és state inicializálása
         self.progress['value'] = 0
         self.progress['maximum'] = len(self.files)
+        self.current_file_progress['value'] = 0
         self.status_label.config(text="Konvertálás folyamatban...")
+        self.time_label.config(text="Becsült hátralévő idő: számítás alatt...")
         self.convert_btn.config(state=tk.DISABLED)
+        self.conversion_running = True
+        self.current_file_index = 0
+        
+        # Minden fájl állapotának frissítése "Várakozás"-ra
+        for i, _ in enumerate(self.files):
+            item_id = self.file_tree.get_children()[i]
+            self.file_tree.item(item_id, values=(self.files[i], "Várakozás"))
+        
         threading.Thread(target=self.convert_files, daemon=True).start()
 
     def convert_files(self):
         success = 0
         fail = 0
         resolution = self.selected_resolution.get()
+        
         for idx, file in enumerate(self.files):
+            self.current_file_index = idx
             base = os.path.splitext(os.path.basename(file))[0]
             out_path = os.path.join(self.output_dir, base + ".mpg")
             
             # Állapot frissítése az aktuális fájllal
-            self.root.after(0, lambda: self.status_label.config(
+            self.root.after(0, lambda file=file: self.status_label.config(
                 text=f"Konvertálás: {os.path.basename(file)}..."
             ))
             
-            result = convert_to_mpg(file, out_path, overwrite=True, resolution=resolution)
+            item_id = self.file_tree.get_children()[idx]
+            self.root.after(0, lambda id=item_id, f=file: self.file_tree.item(id, values=(f, "Konvertálás...")))
+            
+            # Progress bar és hátralévő idő visszaállítása
+            self.root.after(0, lambda: self.current_file_progress.config(value=0))
+            self.root.after(0, lambda: self.time_label.config(text="Becsült hátralévő idő: számítás alatt..."))
+            
+            # Konvertálás az előrehaladás-visszajelzéssel
+            result = convert_to_mpg(file, out_path, overwrite=True, resolution=resolution, progress_callback=self.update_progress)
+            
             if result:
                 success += 1
+                self.root.after(0, lambda id=item_id, f=file: self.file_tree.item(id, values=(f, "Kész")))
             else:
                 fail += 1
-            # Frissítse a progress bar-t
+                self.root.after(0, lambda id=item_id, f=file: self.file_tree.item(id, values=(f, "Sikertelen")))
+                
+            # Frissítse a teljes folyamat progress bar-t
             self.root.after(0, self.progress.step)
+        
+        self.conversion_running = False
         self.root.after(0, self.show_result, success, fail)
 
     def show_result(self, success, fail):
         msg = f"Sikeres: {success}, Sikertelen: {fail}"
         self.status_label.config(text=msg)
+        self.time_label.config(text="Becsült hátralévő idő: --:--")
         self.convert_btn.config(state=tk.NORMAL)
         if fail == 0 and success > 0:
             messagebox.showinfo("Kész", "Minden fájl sikeresen konvertálva!")
