@@ -71,6 +71,7 @@ function InitializeSetup(): Boolean;
 var
   PrevPath: string;
   InstallPath: string;
+  ResultCode: Integer;
 begin
   Result := True;
   
@@ -89,7 +90,7 @@ begin
         'UninstallString', InstallPath) then
       begin
         // Lefuttatjuk az uninstallert
-        Exec(RemoveQuotes(InstallPath), '/SILENT', '', SW_SHOW, ewWaitUntilTerminated, Result);
+        Exec(RemoveQuotes(InstallPath), '/SILENT', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
       end;
     end;
   end;
