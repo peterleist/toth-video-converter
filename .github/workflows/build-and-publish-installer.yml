@@ -7,6 +7,13 @@ on:
       - 'v*'  # A workflow futtatása az összes 'v' kezdetű tag publikálása esetén (pl. v1.0.0)
   workflow_dispatch:  # Manuális indítás lehetősége
 
+# Explicit jogosultságok megadása a release létrehozásához
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  packages: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -14,6 +21,8 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Teljes git history a helyes tag-kezeléshez
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -81,5 +90,6 @@ jobs:
         body: ${{ env.RELEASE_NOTES }}
         draft: false
         prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

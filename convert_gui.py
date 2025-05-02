@@ -9,7 +9,7 @@ class VideoConverterGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Videó MPG konvertáló")
-        self.root.geometry("600x450")
+        self.root.geometry("800x600")
         self.files = []
         self.output_dir = os.getcwd()
 
@@ -84,7 +84,7 @@ class VideoConverterGUI:
 
         # Felbontás kiválasztó
         self.resolutions = [
-            "720x576", "1920x1080", "1280x720", "640x480", 
+            "1920x1080", "720x576", "1280x720", "640x480", 
             "3840x2160", "854x480", "320x240"
         ]
         self.selected_resolution = tk.StringVar(value=self.resolutions[0])
