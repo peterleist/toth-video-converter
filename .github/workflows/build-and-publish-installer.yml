@@ -1,0 +1,85 @@
+name: Build and Publish Windows Installer
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'  # A workflow futtatása az összes 'v' kezdetű tag publikálása esetén (pl. v1.0.0)
+  workflow_dispatch:  # Manuális indítás lehetősége
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        
+    - name: Download and Install Inno Setup
+      run: |
+        Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "is.exe"
+        Start-Process -FilePath "is.exe" -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+    
+    - name: Create Application Icon (if missing)
+      run: |
+        if (-not(Test-Path "app_icon.ico")) {
+          # Ha nincs ikon, készítünk egy alapértelmezettet
+          Invoke-WebRequest -Uri "https://www.svgrepo.com/download/530440/video-conversion.svg" -OutFile "app_icon.svg"
+          npm install -g svg-to-ico
+          svg-to-ico app_icon.svg app_icon.ico
+        }
+      continue-on-error: true  # Folytatjuk, még ha nem sikerül az ikon létrehozása
+    
+    - name: Build Executable with PyInstaller
+      run: |
+        python build_exe.py
+      
+    - name: Build Installer with Inno Setup
+      run: |
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+    
+    - name: Upload Installer as Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: VideoConverterSetup
+        path: installer/VideoConverterSetup.exe
+    
+    - name: Generate Release Notes
+      if: startsWith(github.ref, 'refs/tags/')
+      id: release_notes
+      run: |
+        $tag = "${{ github.ref_name }}"
+        $releaseNotes = "# Videó MPG Konvertáló $tag`n`n"
+        $releaseNotes += "## Telepítési útmutató`n`n"
+        $releaseNotes += "1. Töltse le a VideoConverterSetup.exe fájlt`n"
+        $releaseNotes += "2. Futtassa a telepítőt adminisztrátori jogokkal`n"
+        $releaseNotes += "3. Kövesse a telepítési varázsló lépéseit`n"
+        $releaseNotes += "`n## Változások ebben a verzióban`n`n"
+        $releaseNotes += "- Videó MPG konverzió támogatása`n"
+        $releaseNotes += "- FFmpeg automatikus telepítése`n"
+        $releaseNotes += "- Felhasználóbarát grafikus felület`n"
+        
+        "RELEASE_NOTES<<EOF" >> $env:GITHUB_ENV
+        $releaseNotes >> $env:GITHUB_ENV
+        "EOF" >> $env:GITHUB_ENV
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: installer/VideoConverterSetup.exe
+        body: ${{ env.RELEASE_NOTES }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
