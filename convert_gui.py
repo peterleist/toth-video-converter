@@ -90,7 +90,9 @@ class VideoConverterGUI:
         # Felbontás kiválasztó
         self.resolutions = [
             "1920x1080", "720x576", "1280x720", "640x480", 
-            "3840x2160", "854x480", "320x240"
+            "3840x2160", "854x480", "320x240",
+            # 8:7 képarányú felbontások
+            "1024x896", "800x700", "640x560", "512x448", "384x336"
         ]
         self.selected_resolution = tk.StringVar(value=self.resolutions[0])
         
@@ -107,6 +109,37 @@ class VideoConverterGUI:
         )
         self.res_menu.pack(side=tk.LEFT)
         self.create_tooltip(self.res_menu, "Válassza ki a kimeneti videó felbontását")
+        
+        # Minőség kiválasztó
+        self.qualities = {
+            "Alacsony": "low",
+            "Közepes": "medium",
+            "Magas": "high",
+            "Nagyon magas": "veryhigh",
+            "Ultra": "ultra",
+            "Maximum": "maximum"
+        }
+        self.selected_quality = tk.StringVar(value="Közepes")
+        
+        quality_frame = ttk.Frame(settings_frame)
+        quality_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(quality_frame, text="Videóminőség:").pack(side=tk.LEFT, padx=(0, 10))
+        self.quality_menu = ttk.Combobox(
+            quality_frame,
+            textvariable=self.selected_quality,
+            values=list(self.qualities.keys()),
+            state='readonly',
+            width=15
+        )
+        self.quality_menu.pack(side=tk.LEFT)
+        self.create_tooltip(self.quality_menu, "Válassza ki a kimeneti videó minőségét:\n"
+                                             "- Alacsony: kisebb fájlméret\n"
+                                             "- Közepes: általános használatra\n"
+                                             "- Magas: jobb minőség, élesebb kép\n"
+                                             "- Nagyon magas: kiváló minőség\n"
+                                             "- Ultra: professzionális minőség zajszűréssel\n"
+                                             "- Maximum: maximális részletesség, nagyobb fájlméret")
 
         # Konvertálás keret
         convert_frame = ttk.Frame(main_frame)
@@ -330,6 +363,7 @@ class VideoConverterGUI:
         success = 0
         fail = 0
         resolution = self.selected_resolution.get()
+        quality = self.qualities[self.selected_quality.get()]
         
         for idx, file in enumerate(self.files):
             self.current_file_index = idx
@@ -348,8 +382,15 @@ class VideoConverterGUI:
             self.root.after(0, lambda: self.current_file_progress.config(value=0))
             self.root.after(0, lambda: self.time_label.config(text="Becsült hátralévő idő: számítás alatt..."))
             
-            # Konvertálás az előrehaladás-visszajelzéssel
-            result = convert_to_mpg(file, out_path, overwrite=True, resolution=resolution, progress_callback=self.update_progress)
+            # Konvertálás az előrehaladás-visszajelzéssel és minőségbeállítással
+            result = convert_to_mpg(
+                file, 
+                out_path, 
+                overwrite=True, 
+                resolution=resolution, 
+                progress_callback=self.update_progress,
+                quality=quality
+            )
             
             if result:
                 success += 1

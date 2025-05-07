@@ -87,6 +87,9 @@ def main():
     parser.add_argument("--overwrite", action="store_true", help="Overwrite output files if they exist")
     parser.add_argument("-o", "--output-dir", help="Output directory for converted files")
     parser.add_argument("--resolution", default="720x576", help="Output resolution (default: 720x576)")
+    parser.add_argument("-q", "--quality", default="medium", 
+                        choices=["low", "medium", "high", "veryhigh", "ultra", "maximum"], 
+                        help="Video quality preset (default: medium)")
     args = parser.parse_args()
     
     # Check if FFmpeg is installed
@@ -121,6 +124,17 @@ def main():
         print("No video files found to convert.")
         sys.exit(1)
     
+    # Quality description text
+    quality_descriptions = {
+        "low": "alacsony minőség, kisebb fájlméret", 
+        "medium": "közepes minőség", 
+        "high": "magas minőség", 
+        "veryhigh": "nagyon magas minőség",
+        "ultra": "professzionális minőség zajszűréssel",
+        "maximum": "maximális részletesség, nagyobb fájlméret"
+    }
+    print(f"Videó minőség: {args.quality} ({quality_descriptions[args.quality]})")
+    
     # Convert each file
     successful = 0
     failed = 0
@@ -148,7 +162,7 @@ def main():
             output_file = None
         
         # Convert the file with progress reporting
-        if convert_to_mpg(file, output_file, args.overwrite, args.resolution, progress_callback):
+        if convert_to_mpg(file, output_file, args.overwrite, args.resolution, progress_callback, args.quality):
             successful += 1
         else:
             failed += 1
